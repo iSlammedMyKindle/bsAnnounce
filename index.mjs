@@ -135,5 +135,5 @@ client.login(token).then(e=>{
         );
     }
 
-    else client.commands.set(commands);
+    else client.application.commands.set(commands);
 });
