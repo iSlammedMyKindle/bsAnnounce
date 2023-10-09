@@ -1,4 +1,7 @@
 {
-    "token":"1234567890theQuickBrownFox",
-    "devGuild":"0987654321"
+    "token": "1234567890theQuickBrownFox",
+    "devGuild": "0987654321",
+    "announcementChannel": "1234567890",
+    "role": "0987654321",
+    "userPermsRole": "1234567890"
 }
