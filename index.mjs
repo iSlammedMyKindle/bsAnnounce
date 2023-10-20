@@ -1,7 +1,7 @@
 import {Client, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle} from 'discord.js';
 
 // Grab the config
-const {token, devGuild, announcementChannel, role, userPermsRole} = JSON.parse( await (await import('fs/promises')).readFile('./config.json') );
+const {token, devGuild, announcementChannel, role} = JSON.parse( await (await import('fs/promises')).readFile('./config.json') );
 const client = new Client({intents:['Guilds']});
 
 // https://discordjs.guide/interactions/modals.html#building-and-responding-with-modals
@@ -36,7 +36,8 @@ const modalBase = {title: "Create Game Day Event", customId:'createGameDayEvent'
     description = {label:"Description", customId:"description", minLength:100, style:TextInputStyle.Paragraph, placeholder:"What's this event about?", maxLength: 1500},
     calendarLink = {label:"Event Link", customId:"calendarLink", style:TextInputStyle.Short, "placeholder":"Link to your calendar event"};
 
-const announcementFormat = (title, description, calendarLink, userId)=> "# "+ title + "\n\n (<@&"+ role + ">) [(event link)](" + calendarLink + ")\n" + description + "\n\n> **Host:** <@" + userId + ">";
+// Let's never ever remove that tiny little space after "+ calendarLink +" - it will absolutely demolish the link because it thinks ) is part of it for some reason
+const announcementFormat = (title, description, calendarLink, userId)=> "# "+ title + "\n\n (<@&"+ role + ">) [(event link)](" + calendarLink + " )\n" + description + "\n\n> **Host:** <@" + userId + ">";
 
 const createEventModal = (existingTitle = '', existingDesc = '', existingCal = '')=>{
     const stuff = new ModalBuilder(modalBase);
@@ -52,11 +53,6 @@ const createEventModal = (existingTitle = '', existingDesc = '', existingCal = '
 client.on(Events.InteractionCreate, async i=>{
     // stuff
     if(i.commandName == 'create-event'){
-        if(!i.member.roles.resolve(userPermsRole) && !i.member.permissions.has('Administrator')){
-            i.reply({content: "Sorry! You need to have the <@&" + userPermsRole + "> role to use this bot.", ephemeral: true});
-            return;
-        }
-
         const sessionData = (sessions[i.guildId] || {})[i.user.id]?.data;
         i.showModal(createEventModal(sessionData?.title, sessionData?.description, sessionData?.calendarLink));
     }
@@ -73,13 +69,13 @@ client.on(Events.InteractionCreate, async i=>{
         // expires.setSeconds(expires.getSeconds() + 30);
 
         if(!sessions[i.guildId]) sessions[i.guildId] = {};
-        if(!sessions[i.guildId][i.user.id]) sessions[i.guildId][i.user.id] = {
+        sessions[i.guildId][i.user.id] = {
             data: {title, description, calendarLink},
             expires
         };
 
         // https://i.imgur.com/5MvfdxB.png
-        if(calendarLink.indexOf("https://discord.com/events/"+i.guildId+"/") != 0){
+        if(/https:\/\/discord.com\/events\/[0-9]*\/[0-9]|https:\/\/discord.gg\/[a-zA-Z0-9]*\?event\=[0-9]*/.exec(calendarLink) == null){
             i.reply({content:"Invalid link! Make a calendar link that's tied to this server by going to the events section, clicking on the the 3 dots and copying the event link\n(https://i.imgur.com/5MvfdxB.png)", ephemeral: true, components: [
                 new ActionRowBuilder({components:[
                     new ButtonBuilder({customId: "edit", style: ButtonStyle.Primary, label: "fiiiiiiiine"})
