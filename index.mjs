@@ -100,7 +100,7 @@ client.on(Events.InteractionCreate, async i=>{
 
 
         // https://i.imgur.com/5MvfdxB.png
-        if(i.customId == "createGameDayEvent" && /https:\/\/discord.com\/events\/[0-9]*\/[0-9]|https:\/\/discord.gg\/[a-zA-Z0-9]*\?event\=[0-9]*/.exec(calendarLink) == null){
+        if(i.customId == "createGameDayEvent" && /https:\/\/discord.com\/events\/[0-9]*\/[0-9]|https:\/\/discord.gg\/[a-zA-Z0-9]*\?event\=[0-9]|https:\/\/discord.com\/invite\/*[a-zA-Z0-9]*\?event\=[0-9]/.exec(calendarLink) == null){
             i.reply({content:"Invalid link! Make a calendar link that's tied to this server by going to the events section, clicking on the the 3 dots and copying the event link\n(https://i.imgur.com/5MvfdxB.png)", ephemeral: true, components: [
                 new ActionRowBuilder({components:[
                     new ButtonBuilder({customId: "edit-" + i.customId, style: ButtonStyle.Primary, label: "fiiiiiiiine"})
