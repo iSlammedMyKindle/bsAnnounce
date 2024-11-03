@@ -2,5 +2,12 @@
     "token": "1234567890theQuickBrownFox",
     "devGuild": "0987654321",
     "announcementChannel": "1234567890",
-    "role": "0987654321"
+    "role": "0987654321",
+    "msgData":{
+        "url": "https://www.twitch.tv/",
+        "name": "Twitch",
+        "state": "Beat Saber",
+        "title": "%user live!",
+        "desc": "%user is now playing Beat Saber! Check 'em out on Twitch using the link above!"
+    }
 }

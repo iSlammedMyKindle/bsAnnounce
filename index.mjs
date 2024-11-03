@@ -1,7 +1,14 @@
+/* Why Hello there! This is a fork of gameDayPoster - it's a simplified version of that,
+    with the ability to make automatic announcements based on Discord activity.
+    It was tuned for Beatsaber, but it doesn't really matter what's configured (see config.example.json)
+    I didn't feel like generalizing game day poster, though at some point I may have to.
+    Generalizing the orignal would require database work, but if there starts to be much more demand for something like this, it may be worth considering making this more professional
+*/
+
 import {Client, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors} from 'discord.js';
 
 // Grab the config
-const {token, devGuild, announcementChannel, role} = JSON.parse( await (await import('fs/promises')).readFile('./config.json') );
+const {token, devGuild, announcementChannel, autoAnnouncementChannel, role, msgData} = JSON.parse( await (await import('fs/promises')).readFile('./config.json') );
 const client = new Client({intents:['Guilds', 'GuildPresences']});
 
 // https://discordjs.guide/interactions/modals.html#building-and-responding-with-modals
@@ -32,26 +39,18 @@ setInterval(()=>{
 // }, 30000);
 
 const modals = {
-    "createGameDayEvent": {
-        modalBase: {title: "Create Game Day Event", customId:'createGameDayEvent'},
-        title: {label:"Title", customId:"title", minLength:5, style:TextInputStyle.Short, required:false, placeholder:"Name your event!"},
-        description: {label:"Description", customId:"description", minLength:100, style:TextInputStyle.Paragraph, placeholder:"What's this event about?", maxLength: 1500},
-        calendarLink: {label:"Event Link", customId:"calendarLink", style:TextInputStyle.Short, "placeholder":"Link to your calendar event"}
-    },
-    "askQuestion": {
-        modalBase: {title: "Ask A Question To The Channel", customId:'askQuestion'},
-        title: {label:"Title", customId:"title", minLength:5, style:TextInputStyle.Short, required:false, placeholder:"Question title"},
-        description: {label:"Description", customId:"description", minLength:100, style:TextInputStyle.Paragraph, placeholder:"WHAT DO YOU WANT!?", maxLength: 1500},
+    "announce": {
+        modalBase: {title: "Make an announcement to the channel", customId:'announce'},
+        title: {label:"Title", customId:"title", minLength:5, style:TextInputStyle.Short, required:false, placeholder:"Announcement title"},
+        description: {label:"Description", customId:"description", minLength:100, style:TextInputStyle.Paragraph, placeholder:"Announcement Body - send a message up to 1500 characters!", maxLength: 1500},
     }
 }
 
-// Let's never ever remove that tiny little space after "+ calendarLink +" - it will absolutely demolish the link because it thinks ) is part of it for some reason
 var msgFormats = {
-    "createGameDayEvent": (title, description, userId, calendarLink)=> "# "+ title + "\n\n (<@&"+ role + ">) [(event link)](" + calendarLink + " )\n" + description + "\n\n> **Host:** <@" + userId + ">",
-    "askQuestion": (title, description, userId)=> "# Question: " + title + "\n\n (<@&"+ role + ">)\n\n __<@" + userId + "> was wondering:__ " + description
+    "announce": (title, description, userId)=> "# " + title + "\n\n (<@&"+ role + ">)\n\n" + description + '\n\n __Author: <@' + userId + '>__'
 };
 
-const createModal = (modalType = '', existingTitle = '', existingDesc = '', existingCal = '')=>{
+const createModal = (modalType = '', existingTitle = '', existingDesc = '')=>{
     const modalObjs = modals[modalType];
 
     const stuff = new ModalBuilder(modalObjs.modalBase);
@@ -61,8 +60,6 @@ const createModal = (modalType = '', existingTitle = '', existingDesc = '', exis
         { "components": [new TextInputBuilder(existingDesc ? {...modalObjs?.description, value: existingDesc} : modalObjs?.description)] },
     ]
 
-    if(modalType == "createGameDayEvent") components.push({ "components": [new TextInputBuilder(existingCal ? {...modalObjs?.calendarLink, value: existingCal} : modalObjs?.calendarLink)] });
-
     stuff.addComponents(...components);
     return stuff;
 }
@@ -71,21 +68,18 @@ const createModal = (modalType = '', existingTitle = '', existingDesc = '', exis
 client.on(Events.InteractionCreate, async i=>{
     // There's only two modals using very similar formats, if this changes, this whole she-bang will need to be refactored XP
     // Getting away with this by the skin of my teeth basically
-    if(i.commandName == 'create-event'){
-        const sessionData = ((sessions[i.guildId] || {})[i.user.id] || {})["createGameDayEvent"];
-        i.showModal(createModal("createGameDayEvent", sessionData?.title, sessionData?.description, sessionData?.calendarLink));
-    }
-    else if(i.commandName == 'ask-question'){
-        const sessionData = ((sessions[i.guildId] || {})[i.user.id] || {})["askQuestion"];
-        i.showModal(createModal("askQuestion", sessionData?.title, sessionData?.description));
+
+    // EDIT: Or just recycle this old piece of bot code like I'm doing right now XP
+    if(i.commandName == 'announce'){
+        const sessionData = ((sessions[i.guildId] || {})[i.user.id] || {})["announce"];
+        i.showModal(createModal("announce", sessionData?.title, sessionData?.description));
     }
 
     else if(i.isModalSubmit()){
         // Store this new draft for later if you choose to come back
         // Scoped within this arrow function
         let title = i.fields.getField('title').value,
-            description = i.fields.getField('description').value,
-            calendarLink = i.customId == "createGameDayEvent" ? i.fields.getField('calendarLink')?.value : undefined;
+            description = i.fields.getField('description').value;
 
         let expires = new Date();
         expires.setHours(expires.getHours() + 24);
@@ -96,24 +90,12 @@ client.on(Events.InteractionCreate, async i=>{
 
         const targetSession = sessions[i.guildId][i.user.id];
         targetSession.expires = expires;
-        targetSession[i.customId] = {title, description, calendarLink};
-
-
-        // https://i.imgur.com/5MvfdxB.png
-        if(i.customId == "createGameDayEvent" && /https:\/\/discord.com\/events\/[0-9]*\/[0-9]|https:\/\/discord.gg\/[a-zA-Z0-9]*\?event\=[0-9]|https:\/\/discord.com\/invite\/*[a-zA-Z0-9]*\?event\=[0-9]/.exec(calendarLink) == null){
-            i.reply({content:"Invalid link! Make a calendar link that's tied to this server by going to the events section, clicking on the the 3 dots and copying the event link\n(https://i.imgur.com/5MvfdxB.png)", ephemeral: true, components: [
-                new ActionRowBuilder({components:[
-                    new ButtonBuilder({customId: "edit-" + i.customId, style: ButtonStyle.Primary, label: "fiiiiiiiine"})
-                ]})
-            ]});
-            
-            return;
-        }
+        targetSession[i.customId] = {title, description};
 
         const draftEmbed = new EmbedBuilder({
             title: "Preview",
             description: "This is a preview of what your message will look like, ready to publish it to <#"+announcementChannel+">?",
-            color:0xad1457 // PIIIIINK
+            color: Colors.Blurple
         });
 
         const btnRow = new ActionRowBuilder({components:[
@@ -122,7 +104,7 @@ client.on(Events.InteractionCreate, async i=>{
             new ButtonBuilder({customId: "publish-" + i.customId, style: ButtonStyle.Danger, label: "Publish"}),
         ]});
 
-        i.reply({content:msgFormats[i.customId](title, description, i.user.id, calendarLink), ephemeral:true, embeds:[draftEmbed], components: [btnRow]});
+        i.reply({content:msgFormats[i.customId](title, description, i.user.id), ephemeral:true, embeds:[draftEmbed], components: [btnRow]});
     }
 
     else if(i.isButton()){
@@ -132,11 +114,11 @@ client.on(Events.InteractionCreate, async i=>{
 
         switch(idRegxp[0]){
             case "edit":
-                i.showModal(createModal(modalId, sessionData?.title, sessionData?.description, sessionData?.calendarLink));
+                i.showModal(createModal(modalId, sessionData?.title, sessionData?.description));
             break;
             case "publish":
                 if(sessionData)
-                    i.guild.channels.fetch(announcementChannel).then(channel=>channel.send(msgFormats[modalId](sessionData?.title, sessionData?.description, i.user.id, sessionData?.calendarLink)));
+                    i.guild.channels.fetch(announcementChannel).then(channel=>channel.send(msgFormats[modalId](sessionData?.title, sessionData?.description, i.user.id)));
             // fallthrough
             case "discard":
                 if(sessionData){
@@ -148,9 +130,30 @@ client.on(Events.InteractionCreate, async i=>{
     }
 });
 
+// This bot's specific feature - automatic detection of the game and it's state
+client.on('presenceUpdate', async function(_oldPresence, activePresence){
+    console.log('presence', arguments);
+    for(const activity of activePresence.activities){
+        if(activity.name == msgData.name && activity.state == msgData.state && activity.url?.indexOf(msgData.url) == 0){
+            // Post to the designated channel
+            // Grab the user avatar based on the previous data
+            const user = activePresence.user;
+            const embed = new EmbedBuilder()
+                .setTitle(msgData.title.replaceAll('%user', user.username))
+                .setImage(user.avatarURL())
+                .setDescription(msgData.desc.replaceAll('%user', user.username))
+                .setURL(activity.url)
+                .setColor(Colors.Blurple)
+            
+            // Find the target discord and search for the channel
+            await activePresence.guild.channels.cache.get(autoAnnouncementChannel).send({content:`(<@&${role}>)`, embeds:[embed]});
+        }
+    }
+});
+
 const commands = [
-    {name:"create-event", description:'Create an event that will be posted in the game day channel', defaultMemberPermissions:"ManageEvents"},
-    {name:"ask-question", description:'Ask a question to users in the channel about an event', defaultMemberPermissions:"ManageEvents"}];
+    {name:"announce", description:'Send an announcement about the game'}
+];
 
 client.login(token).then(e=>{
     console.log('Bot logged in!');
@@ -162,24 +165,4 @@ client.login(token).then(e=>{
     }
 
     else client.application.commands.set(commands);
-});
-
-client.on('presenceUpdate', async function(_oldPresence, activePresence){
-    console.log('presence', arguments);
-    for(const activity of activePresence.activities){
-        if(activity.name == 'Twitch' && activity.state == 'Beat Saber' && activity.url?.indexOf('https://www.twitch.tv/') == 0){
-            // Post to the designated channel
-            // Grab the user avatar based on the previous data
-            const user = activePresence.user;
-            const embed = new EmbedBuilder()
-                .setTitle(user.username + ' Live!')
-                .setImage(user.avatarURL())
-                .setDescription(user.username + ' is now playing Beat Saber! Check \'em out on Twitch using the link above!')
-                .setURL(activity.url)
-                .setColor(Colors.Blurple)
-            
-            // Find the target discord and search for the channel
-            await activePresence.guild.channels.cache.get(announcementChannel).send({embeds:[embed]});
-        }
-    }
 });
