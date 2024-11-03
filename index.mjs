@@ -1,8 +1,8 @@
-import {Client, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle} from 'discord.js';
+import {Client, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors} from 'discord.js';
 
 // Grab the config
 const {token, devGuild, announcementChannel, role} = JSON.parse( await (await import('fs/promises')).readFile('./config.json') );
-const client = new Client({intents:['Guilds']});
+const client = new Client({intents:['Guilds', 'GuildPresences']});
 
 // https://discordjs.guide/interactions/modals.html#building-and-responding-with-modals
 // https://discord.com/developers/docs/interactions/message-components
@@ -162,4 +162,24 @@ client.login(token).then(e=>{
     }
 
     else client.application.commands.set(commands);
+});
+
+client.on('presenceUpdate', async function(_oldPresence, activePresence){
+    console.log('presence', arguments);
+    for(const activity of activePresence.activities){
+        if(activity.name == 'Twitch' && activity.state == 'Beat Saber' && activity.url?.indexOf('https://www.twitch.tv/') == 0){
+            // Post to the designated channel
+            // Grab the user avatar based on the previous data
+            const user = activePresence.user;
+            const embed = new EmbedBuilder()
+                .setTitle(user.username + ' Live!')
+                .setImage(user.avatarURL())
+                .setDescription(user.username + ' is now playing Beat Saber! Check \'em out on Twitch using the link above!')
+                .setURL(activity.url)
+                .setColor(Colors.Blurple)
+            
+            // Find the target discord and search for the channel
+            await activePresence.guild.channels.cache.get(announcementChannel).send({embeds:[embed]});
+        }
+    }
 });
