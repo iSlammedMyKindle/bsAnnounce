@@ -47,7 +47,7 @@ const modals = {
 }
 
 var msgFormats = {
-    "announce": (title, description, userId)=> "# " + title + "\n\n (<@&"+ role + ">)\n\n" + description + '\n\n __Author: <@' + userId + '>__'
+    "announce": (title, description, userId, role)=> `# ${title}\n\n (${ role == '@everyone' ? role: "<@&"+ role + ">"})\n\n${description}\n\n __Author: <@${userId}>__`
 };
 
 const createModal = (modalType = '', existingTitle = '', existingDesc = '')=>{
@@ -57,8 +57,8 @@ const createModal = (modalType = '', existingTitle = '', existingDesc = '')=>{
 
     const components = [
         { "components": [new TextInputBuilder(existingTitle ? {...modalObjs?.title, value: existingTitle} : modalObjs?.title)] },
-        { "components": [new TextInputBuilder(existingDesc ? {...modalObjs?.description, value: existingDesc} : modalObjs?.description)] },
-    ]
+        { "components": [new TextInputBuilder(existingDesc ? {...modalObjs?.description, value: existingDesc} : modalObjs?.description)] }
+    ];
 
     stuff.addComponents(...components);
     return stuff;
@@ -70,6 +70,10 @@ client.on(Events.InteractionCreate, async i=>{
     // Getting away with this by the skin of my teeth basically
 
     // EDIT: Or just recycle this old piece of bot code like I'm doing right now XP
+
+    // Collect the role name in order to display the name
+    const roleLabel = i.guild.roles.cache.get(role).name;
+    
     if(i.commandName == 'announce'){
         const sessionData = ((sessions[i.guildId] || {})[i.user.id] || {})["announce"];
         i.showModal(createModal("announce", sessionData?.title, sessionData?.description));
@@ -79,7 +83,7 @@ client.on(Events.InteractionCreate, async i=>{
         // Store this new draft for later if you choose to come back
         // Scoped within this arrow function
         let title = i.fields.getField('title').value,
-            description = i.fields.getField('description').value;
+            description = i.fields.getField('description').value
 
         let expires = new Date();
         expires.setHours(expires.getHours() + 24);
@@ -101,8 +105,10 @@ client.on(Events.InteractionCreate, async i=>{
         const btnRow = new ActionRowBuilder({components:[
             new ButtonBuilder({customId: "edit-" + i.customId, style: ButtonStyle.Primary, label: "Edit"}),
             new ButtonBuilder({customId: "discard-" + i.customId, style: ButtonStyle.Secondary, label: "Discard"}),
-            new ButtonBuilder({customId: "publish-" + i.customId, style: ButtonStyle.Danger, label: "Publish"}),
+            new ButtonBuilder({customId: "publishotherrole-" + i.customId, style: ButtonStyle.Danger, label: "Ping @" + roleLabel}),
+            new ButtonBuilder({customId: "publisheveryone-" + i.customId, style: ButtonStyle.Danger, label: "Ping @everyone"}),
         ]});
+
 
         i.reply({content:msgFormats[i.customId](title, description, i.user.id), ephemeral:true, embeds:[draftEmbed], components: [btnRow]});
     }
@@ -118,7 +124,7 @@ client.on(Events.InteractionCreate, async i=>{
             break;
             case "publish":
                 if(sessionData)
-                    i.guild.channels.fetch(announcementChannel).then(channel=>channel.send(msgFormats[modalId](sessionData?.title, sessionData?.description, i.user.id)));
+                    i.guild.channels.fetch(announcementChannel).then(channel=>channel.send(msgFormats[modalId](sessionData?.title, sessionData?.description, i.user.id, i.customId.indexOf('everyone') > -1 ? '@everyone' : role)));
             // fallthrough
             case "discard":
                 if(sessionData){
