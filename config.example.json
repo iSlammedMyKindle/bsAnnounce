@@ -4,6 +4,7 @@
     "announcementChannel": "1234567890",
     "autoAnnouncementChannel":"121212121212",
     "role": "0987654321",
+    "streamLockRemoval": 210,
     "msgData":{
         "url": "https://www.twitch.tv/",
         "name": "Twitch",

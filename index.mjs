@@ -8,7 +8,7 @@
 import {Client, Events, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors} from 'discord.js';
 
 // Grab the config
-const {token, devGuild, announcementChannel, autoAnnouncementChannel, role, msgData} = JSON.parse( await (await import('fs/promises')).readFile('./config.json') );
+const {token, devGuild, announcementChannel, autoAnnouncementChannel, role, msgData, streamLockRemoval} = JSON.parse( await (await import('fs/promises')).readFile('./config.json') );
 const client = new Client({intents:['Guilds', 'GuildPresences']});
 
 // https://discordjs.guide/interactions/modals.html#building-and-responding-with-modals
@@ -47,7 +47,7 @@ const modals = {
 }
 
 var msgFormats = {
-    "announce": (title, description, userId, role)=> `# ${title}\n\n (${ role == '@everyone' ? role: "<@&"+ role + ">"})\n\n${description}\n\n __Author: <@${userId}>__`
+    "announce": (title, description, userId, role)=> `# ${title}\n\n (${ !role ? 'Role Goes Here': role == '@everyone' ? role: "<@&"+ role + ">"})\n\n${description}\n\n __Author: <@${userId}>__`
 };
 
 const createModal = (modalType = '', existingTitle = '', existingDesc = '')=>{
@@ -136,9 +136,24 @@ client.on(Events.InteractionCreate, async i=>{
     }
 });
 
+// Sometimes the presence may update multiple times, this is here to help ignore changes.
+const presenceSessions = new Map();
+
+// Set a time for however many was set for the bot to ignore future presence updates
+// Check this every 30 minutes
+setInterval(()=>{
+    for(const presenceDate of presenceSessions){
+        // Remove this since the time expired
+        if(presenceDate[1].getTime() + (1000 * 60 * streamLockRemoval) < new Date().getTime()){
+            presenceSessions.delete(presenceDate[0]);
+            console.log('Deleted Session from', presenceDate);
+        }
+    }
+}, 1800000);
+
 // This bot's specific feature - automatic detection of the game and it's state
 client.on('presenceUpdate', async function(_oldPresence, activePresence){
-    console.log('presence', arguments);
+    // console.log('presence', arguments);
     for(const activity of activePresence.activities){
         if(activity.name == msgData.name && activity.state == msgData.state && activity.url?.indexOf(msgData.url) == 0){
             // Post to the designated channel
@@ -151,8 +166,16 @@ client.on('presenceUpdate', async function(_oldPresence, activePresence){
                 .setURL(activity.url)
                 .setColor(Colors.Blurple)
             
+            if(presenceSessions.get(activePresence.user.id)){
+                console.warn('[', activePresence.user.username, 'is still streaming within the buffer time, skipping ]');
+                return;
+            }
+                
             // Find the target discord and search for the channel
             await activePresence.guild.channels.cache.get(autoAnnouncementChannel).send({content:`(<@&${role}>)`, embeds:[embed]});
+            presenceSessions.set(activePresence.user.id, new Date());
+
+            console.log('[ Announced live stream for', activePresence.user.username, ']');
         }
     }
 });
